@@ -50,6 +50,8 @@
 
 
 // ADD YOUR #defines (if any) here
+#define UTC_TIME_LIMIT 2360
+#define MAX_HOURS 2400
 
 int get_local_time(int town, int utc_month, int utc_day, int utc_time);
 void run_unit_tests(void);
@@ -60,6 +62,7 @@ int is_valid_town(int town);
 int is_valid_date(int utc_month, int utc_day);
 int is_valid_time(int utc_time);
 int choose_timezone(int town, int utc_month, int utc_day, int utc_time);
+int final_output_checks(int local_time);
 
 
 // DO NOT CHANGE THIS FUNCTION
@@ -149,28 +152,30 @@ int get_local_time(int town, int utc_month, int utc_day, int utc_time) {
     // YOU ARE NOT PERMITTED TO USE ARRAYS, LOOPS, PRINTF OR SCANF
     // SEE THE ASSIGNMENT SPECIFICATION FOR MORE RESTRICTIONS
 
-	//Inside function should be various if statements to choose time offset to use
-	//Should also make sure code does not break for weird cases (will test later)
-	//These should later be placed into seperate functions that are called
-    //Change return statement, as it only works for Sydney (AEDT offset)
-
+	int local_time;
+	
+	//Returning Invalid Input if something wrong is entered, else determining timezone
 	if (is_valid_town(town) == INVALID_INPUT) {
-		return INVALID_INPUT;
+		local_time = INVALID_INPUT;
 	} else if (is_valid_date(utc_month, utc_day) == INVALID_INPUT) {
-		return INVALID_INPUT;
+		local_time = INVALID_INPUT;
 	} else if (is_valid_time(utc_time) == INVALID_INPUT) {
-		return INVALID_INPUT;
+		local_time = INVALID_INPUT;
+	} else {
+		local_time = choose_timezone(town, utc_month, utc_day, utc_time);
 	}
 
-	//Insert rules to determine which time zone it is (also if daylight saving or not)
-	//In NSW, Daylight savings will end 3am Sunday, 1 April & begins at 2am 7th October
-	//Ends: This is 1600 UTC time previous day (since NSW is +1100 DST)
-	//Starts: This is 1500 UTC time 6th October (Going back one hour to normal time)
+    //Checks to see if the local time to be outputted is correct. (w/ case for Eucla)
+    //TEST IF SIMILAR THING NEEDS TO BE DONE FOR LORD_HOWE AND CENTRAL_TIME
+    //Since their shift ends in 30 (whilst Eucla ends in 45)
+	if ((local_time >= MAX_HOURS) && (town == TOWN_EUCLA)) {
+        local_time = (local_time - UTC_TIME_LIMIT);
+    } else {
+        local_time = final_output_checks(local_time);
+    }
 
-	//MAKE ANOTHER RULE SO IF UTC TIME GOES OVER 23599 GO BACK TO ZERO
-	return utc_time + choose_timezone(town, utc_month, utc_day, utc_time);
+	return local_time;
 }
-
 
 // ADD YOUR FUNCTIONS HERE
 
@@ -192,7 +197,6 @@ int is_valid_date(int utc_month, int utc_day) {
 
 	int output_date;
 
-
 	//Basic test to confirm valid month and day is chosen
 	if ((utc_month < 1) || (utc_month > 12)) {
 		output_date = INVALID_INPUT;
@@ -201,7 +205,19 @@ int is_valid_date(int utc_month, int utc_day) {
 	} else {
 		output_date = 0;
     }
-    //Cases for Feb 31st etc as well as 30 days (September, April, June, November)
+
+	//Testing for months with less than 31 days
+    if (utc_month == 2 && utc_day > 28) {
+		output_date = INVALID_INPUT;
+    } else if (utc_month == 4 && utc_day > 30) {
+		output_date = INVALID_INPUT;
+    } else if (utc_month == 6 && utc_day > 30) {
+		output_date = INVALID_INPUT;
+    } else if (utc_month == 9 && utc_day > 30) {
+		output_date = INVALID_INPUT;
+    } else if (utc_month == 11 && utc_day > 30) {
+		output_date = INVALID_INPUT;
+    }
 
     return output_date;
 }
@@ -211,7 +227,7 @@ int is_valid_time(int utc_time) {
 	int output_time;
 
 	//Basic test to ensure valid utc time is chosen
-	if ((utc_time < 0) || (utc_time > 2359)) {
+	if ((utc_time < 0) || (utc_time >= UTC_TIME_LIMIT)) {
 		output_time = INVALID_INPUT;
 	} else if ((utc_time%100) >= 60) {
 		output_time = INVALID_INPUT;
@@ -226,25 +242,106 @@ int choose_timezone(int town, int utc_month, int utc_day, int utc_time) {
 
 	int output_timezone;
 
-	//Determining what timezone offset should be added to the UTC time
-	if (town == TOWN_ADELAIDE) {
-		output_timezone = TIMEZONE_ACST_OFFSET; //Change!
+	//Returning timezone for Adelaide & Broken Hill
+	if ((town == TOWN_ADELAIDE) || (town == TOWN_BROKEN_HILL)) {
+		if ((utc_month < 3) || (utc_month > 10)) {
+		    output_timezone = utc_time + TIMEZONE_ACDT_OFFSET;
+		} else if (((utc_month == 3) && (utc_day <= 31))
+		|| ((utc_month == 10) && (utc_day >= 6))) {
+		    output_timezone = utc_time + TIMEZONE_ACDT_OFFSET;       
+		} else if (((utc_month == 3) && (utc_day == 31) && (utc_time < 1630))
+		|| ((utc_month == 10) && (utc_day == 6) && (utc_time >= 1630))) {
+		    output_timezone = utc_time + TIMEZONE_ACDT_OFFSET;       
+		} else {
+		    output_timezone = utc_time + TIMEZONE_ACST_OFFSET; 
+		}
+	}
+
+	//Returning timezone for Brisbane
+	if (town == TOWN_BRISBANE) {
+		output_timezone = utc_time + TIMEZONE_AEST_OFFSET;
+	}
+
+	//Returning timezone for Sydney, Canberrra, Hobart & Melbourne
+	if ((town == TOWN_SYDNEY) || (town == TOWN_CANBERRA)
+	|| (town == TOWN_HOBART) || (town == TOWN_MELBOURNE)) { 
+		if ((utc_month < 3) || (utc_month > 10)) {
+		    output_timezone = utc_time + TIMEZONE_AEDT_OFFSET;
+		} else if (((utc_month == 3) && (utc_day <= 31))
+		|| ((utc_month == 10) && (utc_day >= 6))) {
+		    output_timezone = utc_time + TIMEZONE_AEDT_OFFSET;
+		} else if (((utc_month == 3) && (utc_day == 31) && (utc_time < 1600))
+		|| ((utc_month == 10) && (utc_day == 6) && (utc_time >= 1600))) {
+			output_timezone = utc_time + TIMEZONE_AEDT_OFFSET;
+		} else {
+			output_timezone = utc_time + TIMEZONE_AEST_OFFSET; 
+		}
 	}
 	
-	if (town == TOWN_SYDNEY) {
-		if ((utc_month < 3)
-		|| ((utc_month = 3) && (utc_day <= 31) && (utc_time <= 1559))
-		|| (utc_month > 10)
-		|| ((utc_month = 10) && (utc_day >= 6) && (utc_time >= 1500))) {
-			output_timezone = TIMEZONE_AEDT_OFFSET;
+	//Returning timezone for Darwin
+	if (town == TOWN_DARWIN) {
+		output_timezone = utc_time + TIMEZONE_ACST_OFFSET;
+	}
+
+	//Returning timezone for Eucla
+	if (town == TOWN_EUCLA) {
+		output_timezone = utc_time + TIMEZONE_ACWST_OFFSET;
+	}
+
+	//Returning timezone for Lord Howe Island
+	if (town == TOWN_LORD_HOWE_IS) {
+		if ((utc_month < 3) || (utc_month > 10)) {
+		    output_timezone = utc_time + TIMEZONE_LHDT_OFFSET;
+		} else if(((utc_month == 3) && (utc_day <= 31))
+		|| ((utc_month == 10) && (utc_day >= 6))) {
+			output_timezone = utc_time + TIMEZONE_LHDT_OFFSET;
+		} else if(((utc_month == 3) && (utc_day == 31) && (utc_time < 1500))
+		|| ((utc_month == 10) && (utc_day == 6) && (utc_time >= 1530))) {
+			output_timezone = utc_time + TIMEZONE_LHDT_OFFSET;
 		} else {
-			output_timezone = TIMEZONE_AEST_OFFSET;
+			output_timezone = utc_time + TIMEZONE_LHST_OFFSET;
+		}
+	}
+
+	//Returning timezone for Perth
+	if (town == TOWN_PERTH) {
+		output_timezone = utc_time + TIMEZONE_AWST_OFFSET;
+	}
+
+	//Returning timezone for Auckland, Christchurch & Wellington
+	if (town == TOWN_AUCKLAND  || town == TOWN_CHRISTCHURCH 
+	|| town == TOWN_WELLINGTON) {
+		if ((utc_month < 3) || (utc_month > 10)) {
+		    output_timezone = utc_time + TIMEZONE_NZDT_OFFSET;
+		} else if (((utc_month == 3) && (utc_day <= 31))
+		|| ((utc_month == 10) && (utc_day >= 6))) {
+		    output_timezone = utc_time + TIMEZONE_NZDT_OFFSET;
+		} else if (((utc_month == 3) && (utc_day == 31) && (utc_time < 1400))
+		|| ((utc_month == 10) && (utc_day == 6) && (utc_time >= 1400))) {
+			output_timezone = utc_time + TIMEZONE_NZDT_OFFSET;
+		} else {
+			output_timezone = utc_time + TIMEZONE_NZST_OFFSET;
 		}
 	}
 
 	return output_timezone;
 }
 
+
+int final_output_checks(int local_time) {
+
+    //Changing the minutes if they are greater than 60
+	if ((local_time % 100) >= 60) {
+		local_time = local_time + 40;
+	}
+        
+    //Changing local time if reaches the 24th hour of a day (MAX_HOURS)
+    if (local_time >= MAX_HOURS) {
+        local_time = (local_time - MAX_HOURS);
+    }
+	
+	return local_time;
+}
 
 // ADD A COMMENT HERE EXPLAINING YOUR OVERALL TESTING STRATEGY
 
